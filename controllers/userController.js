@@ -8,6 +8,12 @@ const sendEmail = require("../utils/sendEmail");
 exports.registerUser = catchAsyncError(async (req, res, next) => {
   const { name, password, email } = req.body;
 
+  const existingUser = await User.findOne({email})
+
+  if(existingUser){
+    return next(new ErrorHandler("User Already Existed", 500));
+  }
+
   const user = await User.create({
     name,
     password,
@@ -78,7 +84,7 @@ exports.forgotPassword = catchAsyncError(async (req, res, next) => {
   try {
     await sendEmail({
       email: user.email,
-      subject: `Ecommerce Password Recovery`,
+      subject: `CourseHub Password Recovery`,
       message,
     });
 
