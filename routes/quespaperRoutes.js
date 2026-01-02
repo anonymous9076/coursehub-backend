@@ -6,9 +6,9 @@ const {
   updateQuestionPaper,
   deleteQuestionPaper,
   likeQuestionPaper,
-  
+  getQuestionPaperById,
 } = require("../controllers/quespaperController");
-const { isAuthenticatedUser, AuthorizeRoles } = require("../middlerware/auth");
+const { isAuthenticatedUser, AuthorizeRoles } = require("../middleware/auth");
 const multer = require("multer");
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
@@ -16,18 +16,30 @@ const upload = multer({ storage });
 Router.get("/question-papers", getAllQuestionPapers)
   .post(
     "/upload-question-papers",
-    upload.single("questionfile"),
     isAuthenticatedUser,
-    AuthorizeRoles("user"),
+    AuthorizeRoles("user", "admin"),
+    upload.array("files", 10),
     createQuestionPaper
   )
-  .post("/update-question-papers/:id", upload.single("questionfile"), updateQuestionPaper)
-  .delete("/delete-question-papers/:id", deleteQuestionPaper)
+  .post(
+    "/upload-question-papers/:id",
+    isAuthenticatedUser,
+    AuthorizeRoles("user", "admin"),
+    upload.array("files", 10),
+    updateQuestionPaper
+  )
+  .delete(
+    "/delete-question-papers/:id",
+    isAuthenticatedUser,
+    AuthorizeRoles("user", "admin"),
+    deleteQuestionPaper
+  )
   .put(
     "/like-question-papers/:id",
     isAuthenticatedUser,
-    AuthorizeRoles("user"),
+    AuthorizeRoles("user", "admin"),
     likeQuestionPaper
-  );
+  )
+  .get("/question-papers/:id", getQuestionPaperById);
 
 module.exports = Router;

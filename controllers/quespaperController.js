@@ -1,163 +1,184 @@
 const questionModel = require("../models/quespaperModel");
 const { deleteImages, QuestionUpload } = require("../utils/uploadFiles");
+const catchAsyncError = require("../middleware/catchAsyncError");
+const ErrorHandler = require("../utils/errorHandler");
+const ApiFeatures = require("../utils/apifeatures");
 
-const createQuestionPaper = async (req, res) => {
+const createQuestionPaper = catchAsyncError(async (req, res, next) => {
   const data = req.body;
-  const file = req.file?.buffer;
-  const userId = req.user._id || "defaultUser123";
+  const files = req.files;
+  const userId = req.user._id;
 
-  try {
-    if (!file) {
-      return res.status(400).json({ message: "No question paper file uploaded" });
-    }
-
-    const result = await QuestionUpload(file);
-
-    const paper = await questionModel.create({
-      title: data.title,
-      notes: data.notes,
-      category: data.category,
-      questionFile: {
-        url: result.secure_url,
-        public_id: result.public_id,
-      },
-      created_by: userId,
-    });
-
-    paper.save();
-    return res.status(200).json({ paper });
-  } catch (err) {
-    return res.status(500).json({ message: "Something went wrong", err: err });
+  if (!files || files.length === 0) {
+    return next(new ErrorHandler("No question paper files uploaded", 400));
   }
-};
 
-const updateQuestionPaper = async (req, res) => {
+  const uploadedFiles = [];
+  for (const file of files) {
+    const result = await QuestionUpload(file.buffer);
+    uploadedFiles.push({
+      url: result.secure_url,
+      public_id: result.public_id,
+    });
+  }
+
+  const paper = await questionModel.create({
+    title: data.title,
+    notes: data.notes,
+    category: data.category,
+    questionFiles: uploadedFiles,
+    created_by: userId,
+  });
+
+  return res.status(200).json({ success: true, paper });
+});
+
+const updateQuestionPaper = catchAsyncError(async (req, res, next) => {
   const data = req.body || {};
   const paperId = req.params.id;
-  const file = req.file?.buffer;
+  const files = req.files;
 
-  try {
-    const paper = await questionModel.findById(paperId);
-    if (!paper) {
-      return res.status(404).json({ message: "Question Paper Not Found" });
-    }
+  const paper = await questionModel.findById(paperId);
+  if (!paper) {
+    return next(new ErrorHandler("Question Paper Not Found", 404));
+  }
 
-    if (file) {
-      if (paper?.questionFile?.public_id) {
-        await deleteImages(paper.questionFile.public_id);
-      }
+  // Ownership check
+  if (paper.created_by.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    return next(new ErrorHandler("You are not authorized to edit this question paper", 403));
+  }
 
-      const result = await QuestionUpload(file);
-      const updatedPaper = await questionModel.updateOne(
-        { _id: paperId },
-        {
-          ...data,
-          questionFile: { url: result.secure_url, public_id: result.public_id },
+  if (files && files.length > 0) {
+    // Delete old images
+    if (paper.questionFiles && paper.questionFiles.length > 0) {
+      for (const file of paper.questionFiles) {
+        if (file.public_id) {
+          await deleteImages(file.public_id);
         }
-      );
-
-      return res.status(200).json(updatedPaper);
-    } else {
-      const updatedPaper = await questionModel.updateOne(
-        { _id: paperId },
-        { ...data }
-      );
-      return res.status(200).json(updatedPaper);
-    }
-  } catch (err) {
-    return res.status(500).json({ message: "Something went wrong", err: err });
-  }
-};
-
-const deleteQuestionPaper = async (req, res) => {
-  const paperId = req.params.id;
-
-  try {
-    const paper = await questionModel.findById(paperId);
-    if (!paper) {
-      return res.status(404).json({ message: "Question Paper Not Found" });
+      }
     }
 
-    if (paper.questionFile?.public_id) {
-      await deleteImages(paper.questionFile.public_id);
+    const uploadedFiles = [];
+    for (const file of files) {
+      const result = await QuestionUpload(file.buffer);
+      uploadedFiles.push({
+        url: result.secure_url,
+        public_id: result.public_id,
+      });
     }
 
-    const deletedOne = await questionModel.deleteOne({ _id: paperId });
+    const updatedPaper = await questionModel.findByIdAndUpdate(
+      paperId,
+      {
+        ...data,
+        questionFiles: uploadedFiles,
+      },
+      { new: true, runValidators: true }
+    );
 
-    return res
-      .status(200)
-      .json({ message: "Question Paper has been deleted", deletedOne });
-  } catch (err) {
-    return res.status(500).json({ message: "Something went wrong", err: err });
+    return res.status(200).json({ success: true, updatedPaper });
+  } else {
+    const updatedPaper = await questionModel.findByIdAndUpdate(
+      paperId,
+      { ...data },
+      { new: true, runValidators: true }
+    );
+    return res.status(200).json({ success: true, updatedPaper });
   }
-};
+});
 
-const getAllQuestionPapers = async (req, res) => {
-  try {
-    const { title, category, sort, page = 1, limit = 10 } = req.query;
-
-    const filter = {};
-    if (category) filter.category = category;
-    if (title) filter.title = title;
-
-    let sortOption = {};
-    if (sort === "new") sortOption.createdAt = -1;
-    else if (sort === "old") sortOption.createdAt = 1;
-
-    const pageNumber = parseInt(page);
-    const limitNumber = parseInt(limit);
-    const skip = (pageNumber - 1) * limitNumber;
-
-    const papers = await questionModel
-      .find(filter)
-      .sort(sortOption)
-      .skip(skip)
-      .limit(limitNumber);
-
-    const totalPapers = await questionModel.countDocuments(filter);
-
-    res.status(200).json({
-      success: true,
-      total: totalPapers,
-      page: pageNumber,
-      totalPages: Math.ceil(totalPapers / limitNumber),
-      count: papers.length,
-      data: papers,
-    });
-  } catch (error) {
-    console.error("Error fetching question papers:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch question papers",
-      error: error.message,
-    });
-  }
-};
-
-const likeQuestionPaper = async (req, res) => {
-  const userId = req.user._id || "defaultUser123";
+const deleteQuestionPaper = catchAsyncError(async (req, res, next) => {
   const paperId = req.params.id;
 
   const paper = await questionModel.findById(paperId);
   if (!paper) {
-    return res.status(404).json("Question paper not found");
+    return next(new ErrorHandler("Question Paper Not Found", 404));
+  }
+
+  // Ownership check
+  if (paper.created_by.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    return next(new ErrorHandler("You are not authorized to delete this question paper", 403));
+  }
+
+  if (paper.questionFiles && paper.questionFiles.length > 0) {
+    for (const file of paper.questionFiles) {
+      if (file.public_id) {
+        await deleteImages(file.public_id);
+      }
+    }
+  }
+
+  await paper.deleteOne();
+
+  return res.status(200).json({ success: true, message: "Question Paper has been deleted" });
+});
+
+const getAllQuestionPapers = catchAsyncError(async (req, res, next) => {
+  const resultPerPage = parseInt(req.query.limit) || 10;
+  const papersCount = await questionModel.countDocuments();
+
+  const apiFeature = new ApiFeatures(questionModel.find(), req.query)
+    .search("title")
+    .filter();
+
+  let papers = await apiFeature.query;
+  let filteredPapersCount = papers.length;
+
+  apiFeature.pagination(resultPerPage);
+
+  if (req.query.sort === "new") {
+    apiFeature.query = apiFeature.query.sort({ createdAt: -1 });
+  } else if (req.query.sort === "old") {
+    apiFeature.query = apiFeature.query.sort({ createdAt: 1 });
+  }
+
+  papers = await apiFeature.query.clone();
+
+  res.status(200).json({
+    success: true,
+    total: papersCount,
+    filteredCount: filteredPapersCount,
+    page: parseInt(req.query.page) || 1,
+    totalPages: Math.ceil(filteredPapersCount / resultPerPage),
+    count: papers.length,
+    data: papers,
+  });
+});
+
+const likeQuestionPaper = catchAsyncError(async (req, res, next) => {
+  const userId = req.user._id;
+  const paperId = req.params.id;
+
+  const paper = await questionModel.findById(paperId);
+  if (!paper) {
+    return next(new ErrorHandler("Question paper not found", 404));
   }
 
   let updated;
   if (paper.liked.includes(userId)) {
-    updated = await questionModel.updateOne(
-      { _id: paperId },
-      { $pull: { liked: userId } }
+    updated = await questionModel.findByIdAndUpdate(
+      paperId,
+      { $pull: { liked: userId } },
+      { new: true }
     );
   } else {
-    updated = await questionModel.updateOne(
-      { _id: paperId },
-      { $push: { liked: userId } }
+    updated = await questionModel.findByIdAndUpdate(
+      paperId,
+      { $push: { liked: userId } },
+      { new: true }
     );
   }
 
   res.status(200).json({ success: true, updated });
-};
+});
+
+const getQuestionPaperById = catchAsyncError(async (req, res, next) => {
+  const paper = await questionModel.findById(req.params.id);
+  if (!paper) {
+    return next(new ErrorHandler("Question paper not found", 404));
+  }
+  res.status(200).json({ success: true, data: paper });
+});
 
 module.exports = {
   createQuestionPaper,
@@ -165,4 +186,5 @@ module.exports = {
   deleteQuestionPaper,
   getAllQuestionPapers,
   likeQuestionPaper,
+  getQuestionPaperById,
 };

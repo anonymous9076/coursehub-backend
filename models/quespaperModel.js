@@ -24,14 +24,21 @@ const QuestionSchema = new mongoose.Schema(
         ref: "User",
       },
     ],
-    questionFile: {
-      url: {
-        type: String,
-        required: [true, "Question file URL is required"],
+    questionFiles: [
+      {
+        url: {
+          type: String,
+          required: [true, "Question file URL is required"],
+        },
+        public_id: {
+          type: String,
+        },
       },
-      public_id: {
-        type: String, 
-      },
+    ],
+    created_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
     },
   },
   { timestamps: true }

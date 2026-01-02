@@ -30,7 +30,7 @@ const QuestionUpload = (fileBuffer) => {
     const stream = cloudinary.uploader.upload_stream(
       {
         folder: "questions",
-        resource_type: "image",   
+        resource_type: "image",
       },
       (error, result) => {
         if (result) resolve(result);
@@ -68,5 +68,21 @@ const deleteImages = async (publicId) => {
   }
 };
 
-module.exports = {CourseUpload,QuestionUpload,deleteVideos,deleteImages}
+const AvatarUpload = (fileBuffer) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: "avatars",
+        resource_type: "image",
+      },
+      (error, result) => {
+        if (result) resolve(result);
+        else reject(error);
+      }
+    );
+    stream.end(fileBuffer);
+  });
+};
+
+module.exports = { CourseUpload, QuestionUpload, deleteVideos, deleteImages, AvatarUpload }
 
