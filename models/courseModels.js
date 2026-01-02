@@ -36,6 +36,10 @@ const CourseSchema = new mongoose.Schema(
     created_by: {
       type: String,
     },
+    duration: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true }
 );

@@ -8,8 +8,8 @@ const userSchema = new mongoose.Schema({
   name: {
     type: String,
     required: [true, "Please Enter Your Name"],
-    maxLength: [15, "Name connot exceted 15 charactors"],
-    minLength: [4, "Name should have more then 4 charactors"],
+    maxLength: [15, "Name cannot exceed 15 characters"],
+    minLength: [4, "Name should have more than 4 characters"],
   },
   email: {
     type: String,
@@ -20,10 +20,10 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: [true, "Please Enter Your Password"],
-    minLength: [4, "Password should be 4  charactors"],
+    minLength: [4, "Password should be 4 characters"],
     select: false,
   },
-  avator: {
+  avatar: {
     public_id: {
       type: String,
     },
@@ -48,7 +48,7 @@ userSchema.pre("save", async function (next) {
 
 // jwt token
 userSchema.methods.getJWTtoken = function () {
-  return jwt.sign({ id: this._id }, process.env.JWT_SCREET_KEY, {
+  return jwt.sign({ id: this._id }, process.env.JWT_SECRET_KEY, {
     expiresIn: process.env.JWT_EXPIRE,
   });
 };

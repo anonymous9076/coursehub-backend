@@ -1,27 +1,44 @@
 const ErrorHandler = require("../utils/errorHandler");
-const catchAsyncError = require("../middlerware/catchAsyncError");
+const catchAsyncError = require("../middleware/catchAsyncError");
 const ApiFeatures = require("../utils/apifeatures");
 const User = require("../models/userModels");
 const sendToken = require("../utils/jwtToken");
 const sendEmail = require("../utils/sendEmail");
-// Register a user
+const crypto = require("crypto");
+const { deleteImages, AvatarUpload } = require("../utils/uploadFiles");
+
 exports.registerUser = catchAsyncError(async (req, res, next) => {
   const { name, password, email } = req.body;
+  const file = req.file?.buffer;
 
-  const existingUser = await User.findOne({email})
+  if (!name || !email || !password) {
+    return next(new ErrorHandler("Please Enter Name, Email & Password", 400));
+  }
 
-  if(existingUser){
-    return next(new ErrorHandler("User Already Existed", 500));
+  const existingUser = await User.findOne({ email });
+
+  if (existingUser) {
+    return next(new ErrorHandler("User Already Existed", 400));
+  }
+
+  let avatarData = {
+    public_id: "default_avatar_id",
+    url: "https://res.cloudinary.com/demo/image/upload/v1312461204/sample.jpg",
+  };
+
+  if (file) {
+    const result = await AvatarUpload(file);
+    avatarData = {
+      public_id: result.public_id,
+      url: result.secure_url,
+    };
   }
 
   const user = await User.create({
     name,
     password,
     email,
-    avator: {
-      public_id: "this a sample id",
-      url: "profileImg",
-    },
+    avatar: avatarData,
   });
 
   sendToken(user, 201, res);
@@ -30,19 +47,19 @@ exports.registerUser = catchAsyncError(async (req, res, next) => {
 exports.loginUser = catchAsyncError(async (req, res, next) => {
   const { email, password } = req.body;
 
-  if ((!email, !password)) {
+  if ((!email || !password)) {
     return next(new ErrorHandler("Please Enter valid Email & password", 400));
   }
 
   const user = await User.findOne({ email }).select("+password");
 
   if (!user) {
-    return next(new ErrorHandler("Invalid email or passoword", 401));
+    return next(new ErrorHandler("Invalid email or password", 401));
   }
 
-  const isPasswordMetched = user.comparePassword(password);
+  const isPasswordMatched = await user.comparePassword(password);
 
-  if (!isPasswordMetched) {
+  if (!isPasswordMatched) {
     return next(new ErrorHandler("Invalid email or password ", 401));
   }
 
@@ -125,7 +142,7 @@ exports.resetPassword = catchAsyncError(async (req, res, next) => {
   }
 
   if (req.body.password !== req.body.confirmPassword) {
-    return next(new ErrorHandler("Password does not password", 400));
+    return next(new ErrorHandler("Password does not match", 400));
   }
 
   user.password = req.body.password;
@@ -175,20 +192,19 @@ exports.updateProfile = catchAsyncError(async (req, res, next) => {
     email: req.body.email,
   };
 
-  // if (req.body.avatar !== "") {
-  //   const user = await User.findById(req.user.id);
+  const file = req.file?.buffer;
 
-  //   const imageId = user.avatar.public_id;
-
-  //   await cloudinary.v2.uploader.destroy(imageId);
-
-  //   const myCloud = await cloudinary.v2.uploader.upload(req.body.avatar, {
-  //     folder: "avatars",
-  //     width: 150,
-  //     crop: "scale",
-  //   });
-
-  // }
+  if (file) {
+    const user = await User.findById(req.user.id);
+    if (user.avatar?.public_id && user.avatar.public_id !== "default_avatar_id") {
+      await deleteImages(user.avatar.public_id);
+    }
+    const result = await AvatarUpload(file);
+    newUserData.avatar = {
+      public_id: result.public_id,
+      url: result.secure_url,
+    };
+  }
 
   const user = await User.findByIdAndUpdate(req.user.id, newUserData, {
     new: true,
@@ -198,6 +214,7 @@ exports.updateProfile = catchAsyncError(async (req, res, next) => {
 
   res.status(200).json({
     success: true,
+    user,
   });
 });
 
