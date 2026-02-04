@@ -6,7 +6,10 @@ const ErrorHandler = require("../utils/errorHandler");
 exports.createCategory = catchAsyncError(async (req, res, next) => {
     const { name } = req.body;
 
-    const category = await Category.create({ name });
+    const category = await Category.create({
+        name,
+        createdBy: req.user._id
+    });
 
     res.status(201).json({
         success: true,
@@ -30,6 +33,12 @@ exports.deleteCategory = catchAsyncError(async (req, res, next) => {
 
     if (!category) {
         return next(new ErrorHandler("Category not found", 404));
+    }
+
+    // Check if user is admin or the creator of the category
+    const isCreator = category.createdBy && category.createdBy.toString() === req.user.id;
+    if (!isCreator && req.user.role !== "admin") {
+        return next(new ErrorHandler("You are not authorized to delete this category", 403));
     }
 
     await category.deleteOne();

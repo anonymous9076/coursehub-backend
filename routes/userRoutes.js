@@ -13,6 +13,7 @@ const {
   updateUserRole,
   deleteUser
 } = require("../controllers/userController");
+const { googleLogin } = require("../controllers/googleController");
 const router = express.Router();
 const { isAuthenticatedUser, AuthorizeRoles } = require("../middleware/auth");
 const multer = require("multer");
@@ -22,6 +23,7 @@ const upload = multer({ storage });
 router.route("/register").post(upload.single("avatar"), registerUser);
 
 router.route("/login").post(upload.none(), loginUser);
+router.route("/google").post(googleLogin);
 
 router.route("/password/forgot").post(upload.none(), forgotPassword);
 

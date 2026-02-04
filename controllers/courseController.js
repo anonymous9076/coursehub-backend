@@ -12,7 +12,13 @@ const createCourse = catchAsyncError(async (req, res, next) => {
   if (!file) {
     return next(new ErrorHandler("No video uploaded", 400));
   }
-  const result = await CourseUpload(file);
+
+  let result;
+  try {
+    result = await CourseUpload(file);
+  } catch (error) {
+    return next(new ErrorHandler(error.message, 400));
+  }
 
   const course = await courseModels.create({
     title: data.title,

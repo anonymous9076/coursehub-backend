@@ -12,6 +12,6 @@ router.route("/category").post(isAuthenticatedUser, createCategory);
 router.route("/categories").get(getAllCategories);
 router
     .route("/category/:id")
-    .delete(isAuthenticatedUser, AuthorizeRoles("admin"), deleteCategory);
+    .delete(isAuthenticatedUser, deleteCategory);
 
 module.exports = router;
